@@ -1,0 +1,127 @@
+#!/usr/bin/env perl
+
+use IO::Socket::INET6;
+
+# some configuration
+my $nodeinfo_ip = "fc5d:baa5:61fc:6ffd:9554:67f0:e290:7535";
+my $nodeinfo_port = "80";
+
+my $get_loc = "/_hypehost/get";
+my $set_loc = "/_hypehost/set";
+
+# check and configure inputs!
+my ($local_addr, $newhost);
+if ($ARGV[1]) {
+    $local_addr = $ARGV[0];
+    $newhost = $ARGV[1];
+} else {
+    if ($ARGV[0] eq "--help" || $ARGV[0] eq "-h") {
+        print "Usage: hypehost <localaddr?> <host>\n";
+        exit();
+    } elsif ($ARGV[0] =~ /:/ && length($ARGV[0]) == 39) {
+        # the first argument is an ipv6 ip.  do the right thing.
+        $local_addr = $ARGV[0];
+    } else {
+        $newhost = $ARGV[0];
+    }
+}
+
+if ($newhost =~ /[^A-Za-z0-9-\.]/) {
+    die "[hypehost/err] illegal characters detected in $newhost\n";
+} elsif ($newhost =~ /^\d/ || $newhost =~ /\.\d/) {
+    die "[hypehost/err] hostnames and domain components cannot begin with numbers.\n";
+} elsif (my $tld = tld_conflict($newhost)) {
+    die "[hypehost/err] hostname $newhost conflicts with ICANN/IANA domain '.$tld'\n";
+}
+
+# create a socket connection!
+my $s;
+if ($local_addr) {
+    $s = IO::Socket::INET6->new(
+        PeerAddr => $nodeinfo_ip,
+        PeerPort => $nodeinfo_port,
+        LocalAddr => $local_addr,
+        Proto => 'tcp',
+    );
+} else {
+    $s = IO::Socket::INET6->new(
+        PeerAddr => $nodeinfo_ip,
+        PeerPort => $nodeinfo_port,
+        Proto => 'tcp',
+    );
+}
+
+unless ($s) {
+    die "Couldn't connect to [$nodeinfo_ip]:$nodeinfo_port: $@\n";
+}
+
+if (defined($newhost)) {
+    # this is a set operation.
+    my $text = get_http_text($s, $set_loc . "?hostname=$newhost");
+    if ($text =~ /^_/) {
+        print "[hypehost/err] $text\n";
+    } else {
+        print "$text\n";
+    }
+} else {
+    # this is a get operation.
+    my $text = get_http_text($s, $get_loc);
+    if ($text eq "_EMPTY_") {
+        print "\n";
+    } elsif ($text =~ /^_/) {
+        warn "[hypehost/err] $text\n";
+    } else {
+        print "$text\n";
+    }
+}
+
+sub tld_conflict {
+    my ($host) = @_;
+    my @tlds = eval <main::DATA>;
+    $host = lc($host);
+    foreach my $tld (@tlds) {
+        if ($host =~ /\.$tld$/) {
+            return $tld;
+        }
+    }
+    return undef;
+}
+
+# stupid simple http request
+sub get_http_text {
+    my ($s, $request) = @_;
+
+    # send the HTTP request
+    print $s "GET $request HTTP/1.1\r\n";
+    print $s "Host: nodeinfo.hype\r\n\r\n";
+
+    my ($headers, $content_length);
+    while (my $line = <$s>) {
+        if ($line =~ /Content-Length: (\d+)/) {
+            $content_length = $1;
+        }
+        $headers .= $line;
+        last if $line eq "\r\n";
+    }
+
+    # ok, read $content_length bytes off of the socket, and return that as the text.
+    my $text;
+    until ($read == $content_length) {
+        my ($buf, $bytes);
+        if ($content_length > 1024) {
+            $bytes = 1024;
+        } else {
+            $bytes = $content_length;
+        }
+        $s->read($buf, $bytes);
+        $text .= $buf;
+
+        # increment our read count.
+        $read += $bytes;
+    }
+
+    return $text;
+}
+
+__DATA__
+qw/ac ad ae aero af ag ai al am an ao aq ar arpa as asia at au aw ax az ba bb bd be bf bg bh bi biz bj bm bn bo br bs bt bv bw by bz ca cat cc cd cf cg ch ci ck cl cm cn co com coop cr cu cv cw cx cy cz de dj dk dm do dz ec edu ee eg er es et eu fi fj fk fm fo fr ga gb gd ge gf gg gh gi gl gm gn gov gp gq gr gs gt gu gw gy hk hm hn hr ht hu id ie il im in info int io iq ir is it je jm jo jobs jp ke kg kh ki km kn kp kr kw ky kz la lb lc li lk lr ls lt lu lv ly ma mc md me mg mh mil mk ml mm mn mo mobi mp mq mr ms mt mu museum mv mw mx my mz na name nc ne net nf ng ni nl no np nr nu nz om org pa pe pf pg ph pk pl pm pn pr pro ps pt pw py qa re ro rs ru rw sa sb sc sd se sg sh si sj sk sl sm sn so sr st su sv sx sy sz tc td tel tf tg th tj tk tl tm tn to tp tr travel tt tv tw tz ua ug uk us uy uz va vc ve vg vi vn vu wf ws xn--0zwm56d xn--11b5bs3a9aj6g xn--3e0b707e xn--45brj9c xn--80akhbyknj4f xn--90a3ac xn--9t4b11yi5a xn--clchc0ea0b2g2a9gcd xn--deba0ad xn--fiqs8s xn--fiqz9s xn--fpcrj9c3d xn--fzc2c9e2c xn--g6w251d xn--gecrj9c xn--h2brj9c xn--hgbk6aj7f53bba xn--hlcj6aya9esc7a xn--j6w193g xn--jxalpdlp xn--kgbechtv xn--kprw13d xn--kpry57d xn--lgbbat1ad8j xn--mgbaam7a8h xn--mgbayh7gpa xn--mgbbh1a71e xn--mgbc0a9azcg xn--mgberp4a5d4ar xn--o3cw4h xn--ogbpf8fl xn--p1ai xn--pgbs0dh xn--s9brj9c xn--wgbh1c xn--wgbl6a xn--xkc2al3hye2a xn--xkc2dl3a5ee0h xn--yfro4i67o xn--ygbi2ammx xn--zckzah xxx ye yt za zm zw/;

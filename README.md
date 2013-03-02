@@ -2,6 +2,7 @@
 # The NodeInfo hypehost command!
 # Prereqs: IO::Socket::INET6
 # apt-get install libio-socket-inet6-perl
+# archlinux: pacman -S perl perl-io-socket-inet6
 # 
 
 To use NodeInfo nameservers on the Hyperboria Network, simply add the 
